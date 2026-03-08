@@ -1,76 +1,76 @@
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-import time
 import re
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import time
+
+def get_asin(url):
+    pattern = r"/([A-Z0-9]{10})(?:[/?]|$)"
+    match = re.search(pattern, url)
+
+    if match:
+        return match.group(1)
+    else:
+        return None
 
 
-class AmazonReviewScraper:
-    def __init__(self, headers=None):
-        self.headers = headers or {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US, en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-        }
+ASIN = get_asin(url)
+MAX_REVIEWS = 50
 
-    def extract_asin(self, url):
-        """Extracts the 10-character Amazon Standard Identification Number."""
-        asin_match = re.search(r"/[dp|gp/product|product-reviews]+/(?P<asin>[a-zA-Z0-9]{10})", url)
-        return asin_match.group("asin") if asin_match else None
+options = Options()
+options.add_argument("--headless")
+options.add_argument("--disable-gpu")
 
-    def get_reviews(self, url, max_pages=3):
-        asin = self.extract_asin(url)
-        if not asin:
-            return pd.DataFrame()
+driver = webdriver.Chrome(options=options)
 
-        all_reviews = []
+url = f"https://www.amazon.com/product-reviews/{ASIN}/?sortBy=recent"
+driver.get(url)
 
-        for page in range(1, max_pages + 1):
-            # Direct request to the review pagination URL
-            target_url = f"https://www.amazon.com/product-reviews/{asin}/ref=cm_cr_arp_d_paging_btm_next_{page}?pageNumber={page}"
+reviews = []
 
-            try:
-                response = requests.get(target_url, headers=self.headers, timeout=10)
-                if response.status_code != 200:
-                    break
+while len(reviews) < MAX_REVIEWS:
 
-                soup = BeautifulSoup(response.content, 'html.parser')
-                review_elements = soup.find_all('div', {'data-hook': 'review'})
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "[data-hook='review']"))
+    )
 
-                if not review_elements:
-                    break
+    review_elements = driver.find_elements(By.CSS_SELECTOR, "[data-hook='review']")
 
-                for item in review_elements:
-                    # 1. account_id
-                    profile = item.find('a', class_='a-profile')
-                    acc_id = profile.get('href').split('/profile/')[1].split('/')[
-                        0] if profile and '/profile/' in profile.get('href') else "Unknown"
+    for review in review_elements:
 
-                    # 2. time
-                    r_date = item.find('span', {'data-hook': 'review-date'})
-                    time_val = r_date.get_text(strip=True) if r_date else None
+        try:
+            text = review.find_element(By.CSS_SELECTOR, "[data-hook='review-body']").text
+            rating = review.find_element(By.CSS_SELECTOR, "[data-hook='review-star-rating']").text
+            date = review.find_element(By.CSS_SELECTOR, "[data-hook='review-date']").text
 
-                    # 3. rating
-                    r_star = item.find('i', {'data-hook': 'review-star-rating'})
-                    rating_val = r_star.get_text(strip=True).split(' ')[0] if r_star else None
+            reviews.append({
+                "text": text,
+                "rating": rating,
+                "date": date
+            })
 
-                    # 4. review_text
-                    r_body = item.find('span', {'data-hook': 'review-body'})
-                    text_val = r_body.get_text(strip=True) if r_body else None
-
-                    all_reviews.append({
-                        'account_id': acc_id,
-                        'time': time_val,
-                        'rating': rating_val,
-                        'review_text': text_val
-                    })
-
-                # Respectful delay to avoid getting your IP banned mid-hackathon
-                time.sleep(1.2)
-
-            except Exception as e:
-                print(f"Error on page {page}: {e}")
+            if len(reviews) >= MAX_REVIEWS:
                 break
 
-        return pd.DataFrame(all_reviews)
+        except:
+            continue
+
+    if len(reviews) >= MAX_REVIEWS:
+        break
+
+
+    try:
+        next_button = driver.find_element(By.CSS_SELECTOR, "li.a-last a")
+        next_button.click()
+        time.sleep(2)
+    except:
+        break
+
+driver.quit()
+
+print(f"Collected {len(reviews)} reviews\n")
+
+for r in reviews[:5]:
+    print(r)
