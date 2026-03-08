@@ -9,4 +9,12 @@ dependencies:
       - fastapi
       - "uvicorn[standard]"
       - langchain-google-genai
+      - langchain-deepseek
       - python-dotenv
+      - scikit-learn
+      - torch
+      - transformers
+      - pandas
+      - numpy
+      - keybert
+      - dotenv
