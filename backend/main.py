@@ -1,5 +1,9 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from langchain_google_genai import ChatGoogleGenerativeAI
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -14,7 +18,7 @@ def hello():
 def ask_gemini():
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
-        google_api_key="AIzaSyDqX8bQhkG22tSYb2FHn7J3oyz8W1kqs2s"  # paste your key here
+        google_api_key=os.getenv("GOOGLE_API_KEY")
     )
 
     prompt = "In exactly 3 bullet points, explain why Python is great for backend development."
