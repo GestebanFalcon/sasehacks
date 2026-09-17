@@ -58,11 +58,10 @@ export function ChatWindow({ messages, onSend, isLoading = false }: Props) {
               </div>
             )}
             <div
-              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm space-y-1 ${
-                msg.role === "user"
-                  ? "bg-violet-600 text-white rounded-tr-sm"
-                  : "bg-[#2e2e2e] text-[rgba(255,255,255,0.87)] rounded-tl-sm border border-white/10"
-              }`}
+              className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm space-y-1 ${msg.role === "user"
+                ? "bg-violet-600 text-white rounded-tr-sm"
+                : "bg-[#2e2e2e] text-[rgba(255,255,255,0.87)] rounded-tl-sm border border-white/10"
+                }`}
             >
               {formatContent(msg.content)}
               <p className="text-[10px] opacity-40 mt-1 text-right">

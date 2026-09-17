@@ -3,9 +3,12 @@ Takes in cleaned review data and converts the reviews into their semantic embedd
 """
 from transformers import AutoTokenizer
 from transformers import AutoModel
+from transformers.utils import logging
 from pandas import DataFrame, Series
 import numpy as np
 import torch
+
+logging.set_verbosity_error()
 
 tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-small-en-v1.5")
 model = AutoModel.from_pretrained("BAAI/bge-small-en-v1.5")

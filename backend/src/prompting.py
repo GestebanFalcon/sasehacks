@@ -5,17 +5,19 @@ Take in review summary data and prompt the appropriate LLM for a response.
 
 import os
 from dotenv import load_dotenv
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_deepseek import ChatDeepSeek
-from pandas import DataFrame
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from pandas import DataFrame, Series
 import pandas as pd
 from .clustering import top_keyphrases_for_cluster
-
+from sklearn.metrics.pairwise import cosine_similarity
 load_dotenv()
 
-#pass into gemini lmao jk deepseek
 
-prompt = ChatPromptTemplate.from_template("""
+# ----- 0. Setup -----
+prompt_text = """
 You are an expert e-commerce product analyst.
 
 Your task is to analyze a set of customer review summaries and produce a
@@ -43,7 +45,11 @@ Major Themes:
 
 Overall Recommendation:
 Buy / Avoid / Mixed
-""")
+"""
+base_prompt = ChatPromptTemplate.from_template(prompt_text)
+prompt = ChatPromptTemplate.from_messages([
+    MessagesPlaceholder("history", optional=True),
+])
 
 llm = ChatDeepSeek(
     model="deepseek-chat",
@@ -51,7 +57,8 @@ llm = ChatDeepSeek(
     temperature=0
 )
 
-chain = prompt | llm
+
+# ----- 1. Util Functions -----
 
 def generate_summaries(df: DataFrame):
     topic_summaries = []
@@ -66,7 +73,6 @@ def generate_summaries(df: DataFrame):
             "topic_id": int(topic_id),
             "review_count": int(len(group)),
             "share_of_reviews": float(len(group) / len(df)),
-            "avg_rating": float(group["rating"].mean()),
             "keywords": keywords,
             "representative_reviews": representative_reviews,
         }
@@ -78,13 +84,75 @@ def generate_summaries(df: DataFrame):
 
     return (topic_df, topic_summaries)
 
-def initial_prompt(topic_summaries: list): 
-    response = chain.invoke({
-        "themes": topic_summaries
-    })
-    return response.content
 
-def re_prompt():
+# ----- 2. Tools -----
+
+@tool
+def search_reviews(query: str, session_id: int) -> str:
+    """
+        Search through the reviews to find specific reviews matching the query
+        This is useful when looking for specific information that may have been touched upon by the reviews or specific sentiments contained in the reviews.
+        Results may or may not contain what you are looking for.
+    """
+    return "I didnt find anything gng"
+
+llm_tools = llm.bind_tools([search_reviews])
+chain = prompt | llm_tools
+basic_chain = prompt | llm
+
+
+# ----- 3. Prompting -----
+
+def initial_prompt(topic_summaries: list): 
+    """Returns history with initial prompt. This could probably throw. I need to add error handling later."""
+
+    #format_messages() also works here. this is a bit more readable
+    initial_message = SystemMessage(content=base_prompt.format(themes=topic_summaries))
+    history = [initial_message]
+
+    response = basic_chain.invoke({
+        "history": history,
+        "tool_choice": "none"
+    })
+
+    history.append(response)
+    return history
+
+def re_prompt(history):
+    """Modifies history in place. Returns nothing"""
     #yo
+    oldHistory = [res.content for res in history]
+    print(oldHistory)
+    response = chain.invoke({
+        "history": history
+    })
+
+    print(response.content)
+    
+    if not response.tool_calls:
+        history.append(response)
+        newHistory = [res.content for res in history]
+        # print(newHistory)
+        return
+
+    tool_results = []
+    for tool in response.tool_calls:
+        tool_result = ""
+        if tool["name"] == "search_reviews":
+            tool_result = "no relevant reviews found :("
+
+        tool_results.append({"name": tool["name"], "result": tool_result})
+
+    history.append(SystemMessage(content=f"Tool call results: {tool_results}"))
+
+    #no looping reprompts for now     
+    response = chain.invoke({
+        "history": history
+    })        
+
+    history.append(response)
+    newHistory = [res.content for res in history]
+
+    # print(newHistory)
     return
 
